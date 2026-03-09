@@ -1,0 +1,110 @@
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+enum Role {
+  PRODUCT_OWNER
+  ADMIN
+  USER
+}
+
+enum PaymentStatus {
+  PENDING
+  SUCCESS
+  FAILED
+}
+
+model User {
+  id              String         @id @default(cuid())
+  name            String
+  email           String         @unique
+  password        String
+  role            Role           @default(USER)
+  organizationId  String?        @map("organization_id")
+  imageQuota      Int            @default(5) @map("image_quota")
+  createdAt       DateTime       @default(now()) @map("created_at")
+  updatedAt       DateTime       @updatedAt @map("updated_at")
+  
+  organization    Organization?  @relation("OrganizationUsers", fields: [organizationId], references: [id], onDelete: Cascade)
+  adminOf         Organization[] @relation("OrganizationAdmin")
+  uploadedImages  Image[]        @relation("UploadedImages")
+  payments        Payment[]
+  sentNotifications     Notification[] @relation("SentNotifications")
+  receivedNotifications Notification[] @relation("ReceivedNotifications")
+  
+  @@map("users")
+}
+
+model Organization {
+  id          String         @id @default(cuid())
+  name        String
+  logoUrl     String?        @map("logo_url")
+  address     String?
+  phone       String?
+  adminId     String         @map("admin_id")
+  createdAt   DateTime       @default(now()) @map("created_at")
+  updatedAt   DateTime       @updatedAt @map("updated_at")
+  
+  admin       User           @relation("OrganizationAdmin", fields: [adminId], references: [id])
+  users       User[]         @relation("OrganizationUsers")
+  images      Image[]
+  payments    Payment[]
+  notifications Notification[]
+  
+  @@map("organizations")
+}
+
+model Image {
+  id              String         @id @default(cuid())
+  data            String         @db.Text // Base64 encoded image data
+  filename        String
+  mimeType        String         @map("mime_type")
+  uploadedById    String         @map("uploaded_by")
+  organizationId  String         @map("organization_id")
+  tags            String[]       @default([])
+  createdAt       DateTime       @default(now()) @map("created_at")
+  
+  uploadedBy      User           @relation("UploadedImages", fields: [uploadedById], references: [id])
+  organization    Organization   @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+  notifications   Notification[]
+  
+  @@map("images")
+}
+
+model Payment {
+  id              String         @id @default(cuid())
+  userId          String         @map("user_id")
+  organizationId  String         @map("organization_id")
+  amount          Float
+  slotsPurchased  Int            @map("slots_purchased")
+  transactionId   String         @unique @map("transaction_id")
+  status          PaymentStatus  @default(PENDING)
+  createdAt       DateTime       @default(now()) @map("created_at")
+  
+  user            User           @relation(fields: [userId], references: [id])
+  organization    Organization   @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+  
+  @@map("payments")
+}
+
+model Notification {
+  id              String         @id @default(cuid())
+  organizationId  String         @map("organization_id")
+  senderId        String         @map("sender_id")
+  receiverIds     String[]       @map("receiver_ids")
+  imageId         String?        @map("image_id")
+  message         String
+  createdAt       DateTime       @default(now()) @map("created_at")
+  
+  organization    Organization   @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+  sender          User           @relation("SentNotifications", fields: [senderId], references: [id])
+  receivers       User[]         @relation("ReceivedNotifications")
+  image           Image?         @relation(fields: [imageId], references: [id])
+  
+  @@map("notifications")
+}
